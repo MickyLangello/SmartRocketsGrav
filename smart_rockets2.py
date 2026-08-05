@@ -23,12 +23,11 @@ HEIGHT = 800
 
 BACKGROUND = (0, 0, 0)
 
-''' Setup 1 '''
 COUNT = 0
 TARGET = Vector(WIDTH / 2, 50)
 SPAWNPOINT = WIDTH / 2, HEIGHT - 100
 
-MAXFORCE = 1  # Сила двигателя #TODO: Подогнать значения для большей наглядности
+MAXFORCE = 1  # Сила двигателя #TODO: Изменить значения для большей наглядности
 GRAVITY_CONSTANT = 30  # Гравитационная постоянная
 MASS = 4  # Масса ракеты
 
@@ -44,12 +43,8 @@ current_settings = {
 settings_menu_open = False
 
 
-# RECT_OBSTACLES = current_settings.get("RECT_layout")
-# CIRCLE_OBSTACLES = current_settings.get("CIRCLE_layout")
-
-
 def random_vector(magnitude=1):
-    # Generates a random direction & speed
+    # Генерирует случайное направление и скорость
     """
     x = random.random()
     if (random.random() > 0.5):
@@ -60,7 +55,7 @@ def random_vector(magnitude=1):
     return Vector(x=x, y=y)
     """
 
-    # Generates a vector with constant speeds but random direction
+    # Генерирует вектор с постоянной скоростью и случайным направлением
     phi = 2 * math.pi * random.random()
     vx = magnitude * cos(phi)
     vy = magnitude * sin(phi)
@@ -84,8 +79,8 @@ def settingsMenu():  # Меню настроек
     settings_menu_open = not settings_menu_open
 
 
-def fullrestart():
-    global COUNT, current_settings, population
+def fullrestart():  # TODO: сделать чтобы параметры можно было менять в реальном времени
+    global COUNT, current_settings, population, start_time
     COUNT = 0
     current_settings["POPULATION"] = slider_population.getValue()  # Обновление настроек
     current_settings["LIFESPAN"] = slider_lifespan.getValue()
@@ -101,6 +96,8 @@ def fullrestart():
             current_settings['CIRCLE_layout'] = circle_layout[i]
             break
     population = Population()
+    start_time = time.time()
+    print("----- Перезапуск с новыми параметрами -----\n")
 
 
 class Population:
@@ -111,6 +108,7 @@ class Population:
         self.generation = 1
         self.maxscore = 0
         self.avgscore = 0
+        self.stdDevScore = 0
         self.matingpool = []
         self.best_rocket = None
 
@@ -119,18 +117,39 @@ class Population:
     def evaluate(self):
 
         maxfit = 0
+        runningsum = 0
+
+        # Подсчёт значений пригодности и определение лучшей ракеты
         for rocket in self.rockets:
             rocket.calcFitness()
-            # print(rocket.fitness)
             if rocket.fitness > maxfit:
                 maxfit = rocket.fitness
                 self.best_rocket = rocket
 
-        self.maxscore = '%.5f' % maxfit
-        self.avgscore = '%.5f' % (sum(r.fitness for r in self.rockets) / len(self.rockets))
-        print(f"Greatest Fitness: {self.maxscore}\nAverage Fitness: {self.avgscore}\n")
+        # Вычисление статистических данных
+        self.avgscore = '%.6f' % (sum(r.fitness for r in self.rockets) / len(self.rockets))
+        self.maxscore = '%.6f' % maxfit
+        for rocket in self.rockets:
+            runningsum += (rocket.fitness - float(self.avgscore)) ** 2
+        self.stdDevScore = '%.6f' % (math.sqrt(runningsum / len(self.rockets)))
 
-        # Normalize values to be between 0-1
+        # Вывод статистических данных #TODO: реализовать вывод в csv файл
+        print(f"Поколение: {self.generation}\n"
+              f"Наибольшая приспособленность: {self.maxscore}\n"
+              f"Средняя приспособленность: {self.avgscore}\n"
+              f"Среднеквадратичное отклонение приспособленности: {self.stdDevScore}")
+        if self.best_rocket.completed:
+            print(f"Наилучшее кол-во шагов: {self.best_rocket.count}")
+        else:
+            print(f"Наилучшее кол-во шагов: {current_settings.get('LIFESPAN')}")
+        print("Прошло времени:", current_time_str, "\n")
+        """
+        print(self.generation, self.maxscore, self.avgscore, self.stdDevScore, self.best_rocket.count, current_time_str)
+        if self.best_rocket.completed:
+            pass
+        else:
+            print(current_settings.get('LIFESPAN'))"""
+        # Нормировать значения в диапазоне 0-1
         for rocket in self.rockets:
             rocket.fitness /= maxfit
 
@@ -145,11 +164,11 @@ class Population:
         newRockets = []
 
         for i in range(len(self.rockets)):
-            # Get the DNA of 2 random parents
+            # Получить ДНК двух случайных родителей
             parentA = random.choice(self.matingpool).dna
             parentB = random.choice(self.matingpool).dna
 
-            # DNA object
+            # ДНК объект
             child = parentA.crossover(parentB)
             child.mutation()
             newRockets.append(Rocket(child))
@@ -181,10 +200,10 @@ class DNA:
         newgenes = []
         mid = random.randint(0, len(self.genes))
         for i in range(len(self.genes)):
-            # If i > mid, take genes from original dna
+            # Если i > mid, взять гены из оригинальной ДНК
             if i > mid:
                 newgenes.append(self.genes[i])
-            # Else if < mid, take genes from partner
+            # Иначе если i =< mid, взять гены от партнера
             else:
                 newgenes.append(partner.genes[i])
         return DNA(newgenes)
@@ -230,11 +249,10 @@ class Rocket:
         self.acc += force / self.mass
 
     def calcFitness(self):
-
         if self.completed:
             self.fitness = 1.0 / 16.0 + 10000 / (self.count ** 2)  # Приспособленность в случае успеха
-        # elif self.crashed:
-        #    self.fitness = 1 / (self.closest_to_finish ** 3)  # Приспособленность в случае провала
+        elif self.crashed:
+            self.fitness = 1 / (self.closest_to_finish ** 3)  # Приспособленность в случае провала
         else:
             self.fitness = 1 / (self.closest_to_finish ** 2)  # Приспособленность в иных случаях
 
@@ -246,14 +264,14 @@ class Rocket:
             self.pos.x, self.pos.y = TARGET.x, TARGET.y
             return
 
-        # If rocket has hit a rectangle obstacle
+        # Если ракета попала в прямоугольное препятствие
         for rect in current_settings.get("RECT_layout"):
             if (rect[0] < self.pos.x < rect[0] + rect[2]) \
                     and (rect[1] < self.pos.y < rect[1] + rect[3]):
                 self.crashed = True
                 return
 
-        # If rocket is out of bounds
+        # Если ракета вышла за пределы рабочей зоны
         if (self.pos.x < 0 or self.pos.x > WIDTH) or (self.pos.y < 0 or self.pos.y > HEIGHT):
             self.crashed = True
             return
@@ -270,7 +288,7 @@ class Rocket:
             acceleration = force / self.mass  # Расчет ускорения ракеты
             self.vel += acceleration * direction  # Изменение скорости ракеты
 
-            # Обновление положения и скорости ракеты
+        # Обновление положения и скорости ракеты
         self.pos += self.vel
 
         if COUNT < current_settings.get("LIFESPAN"):
@@ -286,12 +304,12 @@ class Rocket:
 
     def show(self, screen1):
 
-        width = int(5 / 2)
-        length = int(25 / 2)
+        width = 2
+        length = 12
 
-        angle = atan2(self.vel.y, self.vel.x)  # Gets angle in radians
+        angle = atan2(self.vel.y, self.vel.x)  # Угол под которым отображается ракета
 
-        # General points for a rectangle around the center point
+        # Основные точки для прямоугольника вокруг центра ракеты
         points = [
             [self.pos.x - length, self.pos.y - width],
             [self.pos.x + length, self.pos.y - width],
@@ -300,16 +318,16 @@ class Rocket:
         ]
 
         for i, point in enumerate(points):
-            # Rotate points around center (x,y)
+            # Повернуть точки вокруг центра ракеты (x,y)
             points[i] = [int((point[0] - self.pos.x) * cos(angle) - (point[1] - self.pos.y) * sin(angle)) + self.pos.x,
                          int((point[0] - self.pos.x) * sin(angle) + (point[1] - self.pos.y) * cos(angle)) + self.pos.y]
 
-        pygame.gfxdraw.aapolygon(screen1, points, self.color)
+        # pygame.gfxdraw.aapolygon(screen1, points, self.color)
         pygame.draw.polygon(screen1, self.color, points)
         pygame.gfxdraw.polygon(screen1, points, (200, 200, 200))
 
 
-screen1 = pygame.display.set_mode([WIDTH, HEIGHT])  # окно симуляции
+screen1 = pygame.display.set_mode([WIDTH, HEIGHT])  # Окно симуляции
 pygame.event.set_allowed([pygame.QUIT, pygame.MOUSEBUTTONDOWN])
 
 clock = pygame.time.Clock()
@@ -317,8 +335,8 @@ pygame.display.set_caption("Smart Rockets")
 
 '''ВИДЖЕТЫ'''
 
-pygame.font.init()  # инициализация шрифтов
-font = pygame.font.SysFont('Verdana', 14)  # создание шрифта
+pygame.font.init()  # Инициализация шрифтов
+font = pygame.font.SysFont('Verdana', 14)  # Создание шрифта
 
 image1 = pygame.image.load("config.png").convert()
 image2 = pygame.image.load("reset.png").convert()
@@ -331,7 +349,7 @@ resetButton = Button(screen1, 750, 60, 50, 50,
                      onRelease=fullrestart)
 slider_population = Slider(screen1, 600, 10, 120, 10, min=50, max=3000, step=10,
                            handleColour=(88, 148, 156), initial=current_settings.get("POPULATION"))
-slider_lifespan = Slider(screen1, 600, 30, 120, 10, min=100, max=1000, step=10,
+slider_lifespan = Slider(screen1, 600, 30, 120, 10, min=100, max=999, step=10,
                          handleColour=(88, 148, 156), initial=current_settings.get("LIFESPAN"))
 slider_mutation = Slider(screen1, 600, 50, 120, 10, min=0.00, max=1.00, step=0.01,
                          handleColour=(88, 148, 156), initial=current_settings.get("MUTATION"))
@@ -350,10 +368,12 @@ boxes.append(button3)
 boxes.append(button4)
 
 settingsMenu()  # Вызов, чтобы спрятать ползунки
-''' Setup 2 '''
+
+''' Основной цикл '''
 
 rocket = Rocket()
 population = Population()
+start_time = time.time()
 running = 1
 while running:
 
@@ -374,11 +394,12 @@ while running:
 
     screen1.fill(BACKGROUND)
 
-    # Draw target
+    # Отрисовка цели
     pygame.gfxdraw.aacircle(screen1, int(TARGET.x), int(TARGET.y), 16, (69, 247, 125))
+    pygame.draw.circle(screen1, (69, 247, 125), (int(TARGET.x), int(TARGET.y)), 16, 2)
     population.run(screen1)
 
-    # Draw rectangle obstacles
+    # Отрисовка препятствий
     for rectangle in current_settings.get("RECT_layout"):
         pygame.gfxdraw.rectangle(screen1, rectangle, (247, 69, 69))
 
@@ -387,21 +408,23 @@ while running:
         obstacle_radius = circle["radius"]
         pygame.draw.circle(screen1, (66, 135, 245), obstacle_pos, obstacle_radius, 2)
 
+    current_time = time.time() - start_time
+    current_time_str = time.strftime('%H:%M:%S', time.gmtime(current_time))
+
     pygame.display.set_caption(
-        f"Умные ракеты | Поколение {population.generation} "
-        f"| Время {COUNT} "
-        f"| Макс. счёт {population.maxscore} "
-        f"| Сред. счёт {population.avgscore}")
+        f"Умные ракеты | Поколение: {population.generation} "
+        f"| Шаг: {COUNT:<3} "
+        f"| Времени с запуска: {current_time_str}")
     COUNT += 1
 
     if COUNT >= current_settings.get("LIFESPAN"):
         population.evaluate()
         population.selection()
         population.generation += 1
-        # population = Population() #Restart pop
+        # population = Population() #Перезапуск
         COUNT = 0
 
-    # добавление текущей позиции в путь
+    # Добавление текущей позиции в путь
     if population.best_rocket is not None:
         population.best_rocket.path.append(population.best_rocket.pos.copy())
         # Отрисовка пути лучшей ракеты
@@ -424,7 +447,7 @@ while running:
         label_mutation.set_alpha(0)
         label_fps.set_alpha(0)
         label_layout.set_alpha(0)
-    else:  # Отрисовка элементов интерфейса
+    else:  # Отрисовка элементов настроек
         label_population.set_alpha(255)
         label_lifespan.set_alpha(255)
         label_mutation.set_alpha(255)

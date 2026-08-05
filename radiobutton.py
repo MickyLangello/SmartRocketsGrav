@@ -19,14 +19,14 @@ class Checkbox:
         self.to = text_offset
         self.ft = font
 
-        # identification for removal and reorginazation
+        # Id для удаления и преобразования
         self.idnum = idnum
 
-        # checkbox object
+        # Объект checkbox
         self.checkbox_obj = pygame.Rect(self.x, self.y, 18, 18)
         self.checkbox_outline = self.checkbox_obj.copy()
 
-        # variables to test the different states of the checkbox
+        # Переменные для проверки различных состояний checkbox
         self.checked = False
 
     def _draw_button_text(self):
@@ -53,7 +53,7 @@ class Checkbox:
         x, y = pygame.mouse.get_pos()
         px, py, w, h = self.checkbox_obj
         if px < x < px + w and py < y < py + w:
-            self.checked = True
+            self.checked = True  # Всегда есть отмеченный radiobutton
            # if self.checked:
            #    self.checked = False
            # else:
