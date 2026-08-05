@@ -1,6 +1,7 @@
 import random
 import time
 import math
+import asyncio
 from math import atan2, cos, sin
 
 import pygame
@@ -375,93 +376,102 @@ rocket = Rocket()
 population = Population()
 start_time = time.time()
 running = 1
-while running:
+current_time_str = "00:00:00"
 
-    clock.tick(current_settings.get("FPS"))
-    events = pygame.event.get()
-    for event in events:
-        if event.type == pygame.QUIT:  # Выход
-            pygame.quit()
-            running = 0
-            quit()
-        if event.type == pygame.MOUSEBUTTONDOWN:
+
+async def main():
+    global COUNT, running, current_time_str
+
+    while running:
+
+        clock.tick(current_settings.get("FPS"))
+        events = pygame.event.get()
+        for event in events:
+            if event.type == pygame.QUIT:  # Выход
+                running = 0
+                break
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                for box in boxes:
+                    box.update_checkbox(event)
+                    if box.checked is True:
+                        for b in boxes:
+                            if b != box:
+                                b.checked = False
+
+        screen1.fill(BACKGROUND)
+
+        # Отрисовка цели
+        pygame.gfxdraw.aacircle(screen1, int(TARGET.x), int(TARGET.y), 16, (69, 247, 125))
+        pygame.draw.circle(screen1, (69, 247, 125), (int(TARGET.x), int(TARGET.y)), 16, 2)
+        population.run(screen1)
+
+        # Отрисовка препятствий
+        for rectangle in current_settings.get("RECT_layout"):
+            pygame.gfxdraw.rectangle(screen1, rectangle, (247, 69, 69))
+
+        for circle in current_settings.get("CIRCLE_layout"):
+            obstacle_pos = circle["pos"]
+            obstacle_radius = circle["radius"]
+            pygame.draw.circle(screen1, (66, 135, 245), obstacle_pos, obstacle_radius, 2)
+
+        current_time = time.time() - start_time
+        current_time_str = time.strftime('%H:%M:%S', time.gmtime(current_time))
+
+        pygame.display.set_caption(
+            f"Умные ракеты | Поколение: {population.generation} "
+            f"| Шаг: {COUNT:<3} "
+            f"| Времени с запуска: {current_time_str}")
+        COUNT += 1
+
+        if COUNT >= current_settings.get("LIFESPAN"):
+            population.evaluate()
+            population.selection()
+            population.generation += 1
+            COUNT = 0
+
+        # Добавление текущей позиции в путь
+        if population.best_rocket is not None:
+            population.best_rocket.path.append(population.best_rocket.pos.copy())
+            # Отрисовка пути лучшей ракеты
+        if population.best_rocket is not None and len(population.best_rocket.path) > 1:
+            pygame.draw.lines(screen1, (0, 255, 0), False, population.best_rocket.path, 2)
+
+        label_population = font.render("Размер популяции:" + str(slider_population.getValue()), True, (255, 255, 255))
+        label_lifespan = font.render("Время цикла:" + str(slider_lifespan.getValue()), True, (255, 255, 255))
+        label_mutation = font.render("Мутация:" + str(int(slider_mutation.getValue() * 100)) + "%", True, (255, 255, 255))
+        label_fps = font.render("FPS:", True, (255, 255, 255))
+        label_layout = font.render("Набор препятствий:", True, (255, 255, 255))
+
+        slider_population.listen(events)
+        slider_lifespan.listen(events)
+        slider_mutation.listen(events)
+
+        if settings_menu_open:
+            label_population.set_alpha(0)
+            label_lifespan.set_alpha(0)
+            label_mutation.set_alpha(0)
+            label_fps.set_alpha(0)
+            label_layout.set_alpha(0)
+        else:  # Отрисовка элементов настроек
+            label_population.set_alpha(255)
+            label_lifespan.set_alpha(255)
+            label_mutation.set_alpha(255)
+            label_fps.set_alpha(255)
+            label_layout.set_alpha(255)
             for box in boxes:
-                box.update_checkbox(event)
-                if box.checked is True:
-                    for b in boxes:
-                        if b != box:
-                            b.checked = False
+                box.render_checkbox()
+            screen1.blit(label_population, (slider_population.getX() - 185, slider_population.getY() - 5))
+            screen1.blit(label_lifespan, (slider_lifespan.getX() - 145, slider_lifespan.getY() - 5))
+            screen1.blit(label_mutation, (slider_mutation.getX() - 115, slider_mutation.getY() - 5))
+            screen1.blit(label_fps, (fps_input.getX() - 40, fps_input.getY() + 5))
+            screen1.blit(label_layout, (button1.x - 155, button1.y))
 
-    screen1.fill(BACKGROUND)
+        pygame_widgets.update(events)
+        pygame.display.update()
 
-    # Отрисовка цели
-    pygame.gfxdraw.aacircle(screen1, int(TARGET.x), int(TARGET.y), 16, (69, 247, 125))
-    pygame.draw.circle(screen1, (69, 247, 125), (int(TARGET.x), int(TARGET.y)), 16, 2)
-    population.run(screen1)
+        await asyncio.sleep(0)
 
-    # Отрисовка препятствий
-    for rectangle in current_settings.get("RECT_layout"):
-        pygame.gfxdraw.rectangle(screen1, rectangle, (247, 69, 69))
+    pygame.quit()
 
-    for circle in current_settings.get("CIRCLE_layout"):
-        obstacle_pos = circle["pos"]
-        obstacle_radius = circle["radius"]
-        pygame.draw.circle(screen1, (66, 135, 245), obstacle_pos, obstacle_radius, 2)
 
-    current_time = time.time() - start_time
-    current_time_str = time.strftime('%H:%M:%S', time.gmtime(current_time))
-
-    pygame.display.set_caption(
-        f"Умные ракеты | Поколение: {population.generation} "
-        f"| Шаг: {COUNT:<3} "
-        f"| Времени с запуска: {current_time_str}")
-    COUNT += 1
-
-    if COUNT >= current_settings.get("LIFESPAN"):
-        population.evaluate()
-        population.selection()
-        population.generation += 1
-        # population = Population() #Перезапуск
-        COUNT = 0
-
-    # Добавление текущей позиции в путь
-    if population.best_rocket is not None:
-        population.best_rocket.path.append(population.best_rocket.pos.copy())
-        # Отрисовка пути лучшей ракеты
-    if population.best_rocket is not None and len(population.best_rocket.path) > 1:
-        pygame.draw.lines(screen1, (0, 255, 0), False, population.best_rocket.path, 2)
-
-    label_population = font.render("Размер популяции:" + str(slider_population.getValue()), True, (255, 255, 255))
-    label_lifespan = font.render("Время цикла:" + str(slider_lifespan.getValue()), True, (255, 255, 255))
-    label_mutation = font.render("Мутация:" + str(int(slider_mutation.getValue() * 100)) + "%", True, (255, 255, 255))
-    label_fps = font.render("FPS:", True, (255, 255, 255))
-    label_layout = font.render("Набор препятствий:", True, (255, 255, 255))
-
-    slider_population.listen(events)
-    slider_lifespan.listen(events)
-    slider_mutation.listen(events)
-
-    if settings_menu_open:
-        label_population.set_alpha(0)
-        label_lifespan.set_alpha(0)
-        label_mutation.set_alpha(0)
-        label_fps.set_alpha(0)
-        label_layout.set_alpha(0)
-    else:  # Отрисовка элементов настроек
-        label_population.set_alpha(255)
-        label_lifespan.set_alpha(255)
-        label_mutation.set_alpha(255)
-        label_fps.set_alpha(255)
-        label_layout.set_alpha(255)
-        for box in boxes:
-            box.render_checkbox()
-        screen1.blit(label_population, (slider_population.getX() - 185, slider_population.getY() - 5))
-        screen1.blit(label_lifespan, (slider_lifespan.getX() - 145, slider_lifespan.getY() - 5))
-        screen1.blit(label_mutation, (slider_mutation.getX() - 115, slider_mutation.getY() - 5))
-        screen1.blit(label_fps, (fps_input.getX() - 40, fps_input.getY() + 5))
-        screen1.blit(label_layout, (button1.x - 155, button1.y))
-
-    pygame_widgets.update(events)
-    pygame.display.update()
-
-pygame.quit()
+asyncio.run(main())
