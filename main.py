@@ -1,12 +1,28 @@
+# /// script
+# dependencies = [
+#  "pygame_widgets"
+# ]
+# ///
+
 import random
 import time
 import math
 import asyncio
 from math import atan2, cos, sin
+import sys
+import types
 
 import pygame
 import pygame.gfxdraw
 from pygame.math import Vector2 as Vector
+
+fake_pyperclip = types.ModuleType("pyperclip")
+fake_pyperclip.copy = lambda text: None
+fake_pyperclip.paste = lambda: ""
+fake_pyperclip.waitForPaste = lambda: ""
+fake_pyperclip.waitForNewPaste = lambda: ""
+fake_pyperclip.determine_clipboard = lambda: (fake_pyperclip.copy, fake_pyperclip.paste)
+sys.modules["pyperclip"] = fake_pyperclip
 
 import pygame_widgets
 from pygame_widgets.button import Button  # Кнопка
@@ -98,7 +114,6 @@ def fullrestart():  # TODO: сделать чтобы параметры мож�
             break
     population = Population()
     start_time = time.time()
-    print("----- Перезапуск с новыми параметрами -----\n")
 
 
 class Population:
@@ -114,6 +129,13 @@ class Population:
         self.best_rocket = None
 
         self.rockets = [Rocket(None) for i in range(self.popsize)]
+        
+        # Переменные для вывода статистики на экран
+        self.stats_generation = 1
+        self.stats_maxscore = "0.000000"
+        self.stats_avgscore = "0.000000"
+        self.stats_stddev = "0.000000"
+        self.stats_best_steps = current_settings.get("LIFESPAN")
 
     def evaluate(self):
 
@@ -134,22 +156,16 @@ class Population:
             runningsum += (rocket.fitness - float(self.avgscore)) ** 2
         self.stdDevScore = '%.6f' % (math.sqrt(runningsum / len(self.rockets)))
 
-        # Вывод статистических данных #TODO: реализовать вывод в csv файл
-        print(f"Поколение: {self.generation}\n"
-              f"Наибольшая приспособленность: {self.maxscore}\n"
-              f"Средняя приспособленность: {self.avgscore}\n"
-              f"Среднеквадратичное отклонение приспособленности: {self.stdDevScore}")
+        # Обновляем данные для отрисовки на экране
+        self.stats_generation = self.generation
+        self.stats_maxscore = self.maxscore
+        self.stats_avgscore = self.avgscore
+        self.stats_stddev = self.stdDevScore
         if self.best_rocket.completed:
-            print(f"Наилучшее кол-во шагов: {self.best_rocket.count}")
+            self.stats_best_steps = self.best_rocket.count
         else:
-            print(f"Наилучшее кол-во шагов: {current_settings.get('LIFESPAN')}")
-        print("Прошло времени:", current_time_str, "\n")
-        """
-        print(self.generation, self.maxscore, self.avgscore, self.stdDevScore, self.best_rocket.count, current_time_str)
-        if self.best_rocket.completed:
-            pass
-        else:
-            print(current_settings.get('LIFESPAN'))"""
+            self.stats_best_steps = current_settings.get('LIFESPAN')
+
         # Нормировать значения в диапазоне 0-1
         for rocket in self.rockets:
             rocket.fitness /= maxfit
@@ -435,6 +451,19 @@ async def main():
             # Отрисовка пути лучшей ракеты
         if population.best_rocket is not None and len(population.best_rocket.path) > 1:
             pygame.draw.lines(screen1, (0, 255, 0), False, population.best_rocket.path, 2)
+
+        stats_texts = [
+            f"Поколение: {population.stats_generation}",
+            f"Макс. приспособленность: {population.stats_maxscore}",
+            f"Средн. приспособленность: {population.stats_avgscore}",
+            f"Отклонение: {population.stats_stddev}",
+            f"Лучшее кол-во шагов: {population.stats_best_steps}",
+            f"Прошло времени: {current_time_str}"
+        ]
+        
+        for i, text in enumerate(stats_texts):
+            surf = font.render(text, True, (255, 255, 255))
+            screen1.blit(surf, (10, 10 + i * 20))
 
         label_population = font.render("Размер популяции:" + str(slider_population.getValue()), True, (255, 255, 255))
         label_lifespan = font.render("Время цикла:" + str(slider_lifespan.getValue()), True, (255, 255, 255))
