@@ -9,6 +9,8 @@
 
 Симуляция эволюционного поведения на основе генетического алгоритма. В этом проекте "умные ракеты" учатся находить оптимальный путь к цели, огибая статические препятствия и адаптируясь к гравитационным аномалиям.
 
+![Screenshot](docs/screenshots/smart_rockets_grav.png)
+
 Попробовать проект в браузере: [https://mickylangello.github.io/SmartRocketsGrav/](https://mickylangello.github.io/SmartRocketsGrav/)
 
 ## Как это работает
